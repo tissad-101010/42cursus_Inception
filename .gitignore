@@ -1,0 +1,11 @@
+
+# ignore .txt files
+*.txt
+# ignore .log files
+*.log
+# ignore .env files
+*.env
+# ignore secret directories
+./secret/
+# 
+

@@ -1,0 +1,12 @@
+# Ignorer le dossier node_modules et les fichiers de logs
+node_modules/
+*.log
+
+# Ignorer les fichiers sensibles
+.env
+secrets/
+
+# Ignorer les fichiers spécifiques aux éditeurs de code
+.vscode/
+.idea/
+.DS_Store

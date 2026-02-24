@@ -1,0 +1,364 @@
+# **************************************************************************** #
+#                                                                              #
+#                                                         :::      ::::::::    #
+#    docker-compose.yml                                 :+:      :+:    :+:    #
+#                                                     +:+ +:+         +:+      #
+#    By: tissad <tissad@student.42.fr>              +#+  +:+       +#+         #
+#                                                 +#+#+#+#+#+   +#+            #
+#    Created: 2025/01/23 20:42:45 by tissad            #+#    #+#              #
+#    Updated: 2025/03/25 14:47:35 by tissad           ###   ########.fr        #
+#                                                                              #
+# **************************************************************************** #
+
+
+name: ${DOCKER_NAME} # project name
+
+#**********************************SERVICES************************************#
+services: # Services of the project
+  # ***************************************************************************#
+  #                                 NGINX                                      #
+  # ***************************************************************************#
+  nginx: #NGINX service name
+
+    build: # build the image
+      context: ./requirements/nginx # Use the Dockerfile to build NGINX
+
+    image: ${NGINX_IMAGE_NAME} # Image name
+
+    container_name: ${NGINX_CONTAINER_NAME} # Container name
+
+    labels: # Labels for the description of the container
+      - com.nginx.description="Nginx Web Server" # Container description
+
+    ports: # Ports mapping
+      - "${DOCKER_PORT_NGINX}:${DOCKER_PORT_NGINX}" # Map the port of the host to the port of the container
+    
+    networks: # Use the network for communication between containers
+      - inception_network # the network name
+
+    volumes: # Show the host directory in the container
+      # volumes shared with the WordPress container 
+      - web_data:${WEB_VOLUME_CONTAINER_PATH}:ro  # Use WordPress files read-only
+
+      # volumes for SSL
+      - ${SSL_VOLUME_HOST_PATH}:${SSL_VOLUME_CONTAINER_PATH}:ro # Use SSL certificates
+
+    depends_on: # Dependencies of the NGINX service
+      - wordpress # Depends on the WordPress service
+
+    restart: unless-stopped # Restart the container unless it is stopped
+  #************************************NGINX***********************************#
+
+
+
+
+
+  #****************************************************************************#
+  #                                WORDPRESS                                   #
+  #****************************************************************************#
+  wordpress: # Name of the WordPress service
+
+    build: # Build the image
+      context: ./requirements/wordpress # Build the image using the Dockerfile
+
+    image: ${WORDPRESS_IMAGE_NAME} # Image name
+
+    container_name: ${WORDPRESS_CONTAINER_NAME} # Container name
+
+    labels: # Labels for the description of the container
+      - com.wordpress.description="WordPress CMS" # Container description
+
+    environment: # Environment variables for the configuration of WordPress
+      # Wordpress configuration
+      WORDPRESS_DB_HOST: mariadb:3306
+      WORDPRESS_DB_NAME: ${DB_NAME}
+      WORDPRESS_DB_USER: ${DB_USER}
+      WORDPRESS_DB_PASSWORD_FILE: /run/secrets/db_password
+      WORDPRESS_URL: ${DOMAIN_NAME}
+      WORDPRESS_TITLE: ${WORDPRESS_TITLE}
+      WORDPRESS_WORKDIR: ${WEB_VOLUME_CONTAINER_PATH}
+      # Wordpress user configuration
+      WORDPRESS_ADMIN_USER: ${WORDPRESS_ADMIN_USER}
+      WORDPRESS_ADMIN_USER_EMAIL: ${WORDPRESS_ADMIN_USER_EMAIL}
+      WORDPRESS_ADMIN_USER_PASSWORD_FILE: /run/secrets/wp_admin_user_password
+      WORDPRESS_USER: ${WORDPRESS_USER}
+      WORDPRESS_USER_EMAIL: ${WORDPRESS_USER_EMAIL}
+      WORDPRESS_USER_PASSWORD_FILE: /run/secrets/wp_user_password
+    
+    secrets: # Use secrets for the configuration of WordPress
+      - db_password
+      - wp_admin_user_password
+      - wp_user_password
+
+    volumes:  # Show the host directory in the container
+      # volumes shared with the NGINX container
+      - web_data:${WEB_VOLUME_CONTAINER_PATH}  # Volume to store WordPress files
+
+    depends_on: # Dependencies of the WordPress service
+      - mariadb # Depends on the MariaDB service
+  
+
+    networks: # Use the network for communication between containers
+      - inception_network # The network name
+
+    restart: unless-stopped # Restart the container unless it is stopped
+  #*******************************WORDPRESS************************************#
+
+
+
+
+
+  #****************************************************************************#
+  #                                MARIADB                                     #
+  #****************************************************************************#
+  mariadb: # Name of the MariaDB service
+
+    build: # Build the image
+      context: ./requirements/mariadb  # Build the image using the Dockerfile
+
+    image: ${DB_IMAGE_NAME} # Image name
+
+    container_name: ${DB_CONTAINER_NAME} # Container name
+
+    labels: # Labels for the description of the container
+      - com.mariadb.description="MariaDB Database Server" # Container description
+
+    environment: # Environment variables for the configuration of MariaDB
+      # MariaDB configuration
+      MYSQL_ROOT_PASSWORD_FILE: /run/secrets/db_root_password
+      MYSQL_DATABASE: ${DB_NAME}
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD_FILE: /run/secrets/db_password # Password of the database
+    
+    secrets: # Use secrets for the configuration of MariaDB
+      - db_password   # Password of the database (secret)
+      - db_root_password # Root password of the database (secret)
+    
+    volumes: # Show the host directory in the container
+      - mariadb_data:${MARIADB_VOLUME_CONTAINER_PATH}  # Volume to store MariaDB data 
+
+    networks: # Use the network for communication between containers
+      - inception_network # Network name
+      - monitoring # Network monitoring for Grafana
+
+    restart: unless-stopped # Restart the container unless it is stopped
+
+  #*******************************MARIADB**************************************#
+
+
+
+
+  #****************************************************************************#
+  #                                VSFTPD                                      #
+  #****************************************************************************#
+  vsftpd: # Name of the VSFTPD service
+    build: # Build the image
+      context: ./requirements/bonus/vsftpd # Build the image using the Dockerfile
+
+    image: ${FTP_IMAGE_NAME} # Image name
+
+    container_name: ${FTP_CONTAINER_NAME} # Container name
+
+    labels: # Labels for the description of the container
+      - com.vsftpd.description="VSFTPD FTP Server" # Container description
+
+    environment: # Environment variables for the configuration of VSFTPD
+      # FTP configuration
+      FTP_USER_PASSWORD_FILE: /run/secrets/ftp_user_password
+      FTP_USER: ${FTP_USER_NAME}
+      FTP_USER_HOME: ${FTP_HOME}
+      FTP_USER_CHROOT: ${FTP_CHROOT}
+
+    secrets: # Use secrets for the configuration of VSFTPD
+      - ftp_user_password # Password of the FTP user (secret)
+
+    volumes: # Show the host directory in the container shared with the WordPress container
+      - web_data:${WEB_VOLUME_CONTAINER_PATH} # Volume to store WordPress files
+
+    networks: # Use the network for communication between containers
+      - inception_network # Network name
+
+    restart: unless-stopped # Restart the container unless it is stopped
+
+  #*******************************VSFTPD***************************************#
+
+
+
+  #****************************************************************************#
+  #                                  REDIS                                     #
+  #****************************************************************************#
+  redis: # Name of the Redis service
+    build: # Build the image
+      context: ./requirements/bonus/redis # Build the image using the Dockerfile
+    
+    image: ${REDIS_IMAGE_NAME} # Image name
+
+    container_name: ${REDIS_CONTAINER_NAME} # Container name
+
+    labels: # Labels for the description of the container
+      - com.redis.description="Redis Server" # Container description
+
+    expose: # Expose the port of the container
+      - "6379" # Expose the port 6379
+    networks: # Use the network for communication between containers
+      - inception_network # Network name
+
+    restart: unless-stopped # Restart the container unless it is stopped
+  #*******************************REDIS-SERVER*********************************#
+
+
+
+  #****************************************************************************#
+  #                                ADMINER                                     #
+  #****************************************************************************#
+  adminer: # Name of the Adminer service
+    build:  # Build the image
+      context: ./requirements/bonus/adminer # Build the image using the Dockerfile
+
+    image: ${ADMINER_IMAGE_NAME} # Image name
+
+    container_name: ${ADMINER_CONTAINER_NAME} # Container name
+
+    labels: # Labels for the description of the container
+      - com.adminer.description="Adminer Database Management Tool"
+
+    ports: # Ports mapping
+      - "8000:8000"
+    networks: # Use the network for communication between containers
+      - inception_network # Network name
+
+    restart: unless-stopped # Restart the container unless it is stopped
+  #********************************ADMINER*************************************#
+
+  
+  
+  #***************************************************************************#
+  #                                GRAFANA                                    #
+  #***************************************************************************#
+  grafana:
+    build: 
+      context: ./requirements/bonus/grafana
+
+    image: ${GRAFANA_IMAGE_NAME}
+    container_name: ${GRAFANA_CONTAINER_NAME}
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD_FILE: /run/secrets/gf_admin_password
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER}
+      GF_SECURITY_ADMIN_EMAIL: ${GRAFANA_ADMIN_EMAIL}
+
+    secrets:
+      - gf_admin_password
+    volumes:
+      - grafana_storage:${GRAFANA_VOLUME_CONTAINER_LIB_PATH}
+      - grafana_storage:${GRAFANA_VOLUME_CONTAINER_LOG_PATH}
+    ports:
+      - "${GRAFANA_PORT}:${GRAFANA_PORT}"
+    networks:
+      - monitoring
+    restart: unless-stopped
+  #********************************GRAFANA*************************************#
+
+
+
+#*********************************STATIC WEB***********************************#
+
+  static:
+    build:
+      context: ./requirements/bonus/static
+    
+    image: ${STATIC_IMAGE_NAME}
+    container_name: ${STATIC_CONTAINER_NAME}
+    
+    volumes:
+      - static_web_data:${STATIC_WEB_VOLUME_CONTAINER_PATH}
+
+    ports: 
+      - "8080:8080"
+
+    networks:
+      - inception_network
+
+    restart: unless-stopped
+
+
+#*******************************SERVICES***************************************#
+
+
+
+#************************************VOLUMES************************************#
+# Volumes
+## Driver: local allows to use the local file system
+## Bind allows containers and host to share the same volume (changes in one side are reflected in the other)
+volumes:
+
+  # Wordpress data
+  web_data: # Nom du volume
+    driver: local # Utilisation du pilote local pour le volume
+    driver_opts: # Options du pilote
+      type: none # Type de pilote
+      device: ${WEB_VOLUME_HOST_PATH}  # Emplacement du volume sur le système hôte
+      o: bind # Option pour montrer le répertoire de l'hôte dans le conteneur
+
+  # MariaDB data
+  mariadb_data: # Nom du volume
+    driver: local # Utilisation du pilote local pour le volume
+    driver_opts:  # Options du pilote
+      type: none # Type de pilote
+      device: ${MARIADB_VOLUME_HOST_PATH} # Emplacement du volume sur le système hôte
+      o: bind # Option pour montrer le répertoire de l'hôte dans le conteneur
+  
+  # grafana data
+  grafana_storage:
+    driver: local
+    driver_opts:
+      type: none
+      device: ${GRAFANA_VOLUME_HOST_PATH}
+      o: bind
+
+  # static web data
+  static_web_data:
+    driver: local
+    driver_opts:
+      type: none
+      device: ${STATIC_WEB_VOLUME_HOST_PATH}
+      o: bind
+#************************************VOLUMES***********************************#
+
+
+
+#***********************************NETWORKS***********************************#
+networks:
+    inception_network: # Nom du réseau
+      name: ${NETWORK_NAME}
+
+      # Driver for the network
+      ## bridge allows containers to communicate with each other
+      driver: bridge # Utilisation du pilote bridge pour la communication entre 
+      #les conteneurs
+    monitoring:
+      name: monitoring
+      driver: bridge
+#***********************************NETWORKS***********************************#
+
+
+#*******************************SECRETS****************************************#
+secrets: # Secrets for the configuration of the services
+  db_password: # Password of the database
+    external: false # External secret
+    file: ${DB_SECRET} # File containing the password
+  db_root_password: # Root password of the database
+    external: false  # External secret
+    file: ${DB_ROOT_SECRET} # File containing the password
+  wp_admin_user_password: # Password of the WordPress admin user
+    external: false # External secret
+    file: ${WP_ADMIN_SECRET} # File containing the password
+  wp_user_password: # Password of the WordPress user
+    external: false # External secret
+    file: ${WP_USER_SECRET}  # File containing the password
+  ftp_user_password: # Password of the FTP user
+    external: false # External secret
+    file: ${FTP_USER_SECRET} # File containing the password
+  gf_admin_password: # Password of the Grafana admin user
+    external: false # External secret
+    file: ${GF_ADMIN_SECRET} # File containing the password
+#*******************************SECRETS****************************************#
